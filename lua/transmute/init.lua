@@ -6,9 +6,9 @@ local action_state = require("telescope.actions.state")
 local previewers = require("telescope.previewers")
 local conf = require("telescope.config").values
 
-require("quick-change.converters.colors")
+require("transmute.converters.colors")
 
-M.data_types = require("quick-change.registry").data_types
+M.data_types = require("transmute.registry").data_types
 
 local function remove_duplicates(list)
   local seen = {}
@@ -94,7 +94,7 @@ M.show_options = function(opts)
       }),
       sorter = conf.generic_sorter(opts),
       previewer = previewers.new_buffer_previewer({
-        define_preview = function(self, entry, status)
+        define_preview = function(self, entry)
           -- Get current visual selection
 
           -- Apply the conversion function

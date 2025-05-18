@@ -2,7 +2,7 @@ local M = {
   data_type = {},
 }
 
-local registry = require("quick-change.registry")
+local registry = require("transmute.registry")
 
 M.data_type["rgb"] = {
   pattern = "rgb%(%d+,%s*%d+,%s*%d+%)",
