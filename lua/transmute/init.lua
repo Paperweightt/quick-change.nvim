@@ -61,11 +61,11 @@ M.get_lines_data_types = function(lines)
 end
 
 M.show_options = function(opts)
-  local lines = get_highlighted_lines()
+  local input_lines = get_highlighted_lines()
   opts = opts or {}
   local conversions = {}
 
-  local data_types = M.get_lines_data_types(lines)
+  local data_types = M.get_lines_data_types(input_lines)
 
   if #data_types == 0 then
     print("no conversions available")
@@ -103,20 +103,30 @@ M.show_options = function(opts)
       sorter = conf.generic_sorter(opts),
       previewer = previewers.new_buffer_previewer({
         define_preview = function(self, entry)
-          -- Get current visual selection
+          local line_data = entry.value[2](input_lines)
+          local new_lines = line_data.new_lines
+          local highlight_data = line_data.highlight_data
+          local ns_id = vim.api.nvim_create_namespace("transmute_highlight")
+          local bufnr = self.state.bufnr
 
-          -- Apply the conversion function
-          local new_lines = entry.value[2](lines)
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
 
-          -- Show result in the preview buffer
-          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, new_lines)
+          for _, highlight in ipairs(highlight_data) do
+            local line = highlight.line - vim.fn.getpos("'<")[2] - 1
+            local col_start = highlight.col_start - 1
+            local col_end = highlight.col_end
+            -- print(col_start .. " " .. col_end)
+
+            vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Search", line, col_start, col_end)
+          end
         end,
       }),
       attach_mappings = function(prompt_bufnr)
         actions.select_default:replace(function()
           actions.close(prompt_bufnr)
           local selection = action_state.get_selected_entry()
-          local new_lines = selection.value[2](lines)
+          local line_data = selection.value[2](input_lines)
+          local new_lines = line_data.new_lines
           local start_pos = vim.fn.getpos("'<")
           local end_pos = vim.fn.getpos("'>")
 
@@ -131,7 +141,8 @@ M.show_options = function(opts)
     :find()
 end
 
--- #131313
+-- #123412
+-- hwb(0, 7%, 93%) sldfkjd #131313
 
 M.setup = function() end
 

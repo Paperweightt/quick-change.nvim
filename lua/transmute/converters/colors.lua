@@ -253,14 +253,41 @@ for start_data_type, start_modules in pairs(M.data_type) do
     if start_data_type ~= end_data_type then
       registry.data_types[start_data_type].converters[end_data_type] = function(lines)
         local new_lines = {}
-        for _, line in ipairs(lines) do
-          local new_line = string.gsub(line, start_modules.pattern, function(str)
-            local data = start_modules.parse(str)
-            return end_modules.stringify(data)
-          end)
-          table.insert(new_lines, new_line)
+        local highlight_data = {}
+
+        for line_number, line in ipairs(lines) do
+          local new_line = ""
+          local i = 0
+
+          while true do
+            local j, k = string.find(line, start_modules.pattern, i + 1) -- find 'next' newline
+
+            -- test for both to make warnings go away
+            if j == nil or k == nil then
+              new_line = new_line .. string.sub(line, i + 1, string.len(line))
+              table.insert(new_lines, new_line)
+              break
+            end
+            local start_string = string.sub(line, j, k)
+            local adjusted_string = end_modules.stringify(start_modules.parse(start_string))
+
+            -- add in non adjusted word
+            new_line = new_line .. string.sub(line, i, j - 1)
+
+            -- add highlight
+            table.insert(highlight_data, {
+              line = line_number,
+              col_start = string.len(new_line) + 1,
+              col_end = string.len(new_line) + string.len(adjusted_string),
+            })
+            -- add in adjusted word
+            new_line = new_line .. adjusted_string
+
+            i = k
+          end
         end
-        return new_lines
+
+        return { new_lines = new_lines, highlight_data = highlight_data }
       end
     end
   end
