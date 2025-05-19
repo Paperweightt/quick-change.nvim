@@ -46,55 +46,71 @@ M.data_type["rgba"] = {
 }
 
 M.data_type["hsl"] = {
-  pattern = "hsl%(%d+,%s*%d+%%,%s*%d+%%%)",
+  pattern = "hsl%(%s*%d+%s*,%s*%d+%%%s*,%s*%d+%%%s*%)",
+
   parse = function(str)
-    local h, s, l = str:match("hsl%((%d+),%s*(%d+)%%,%s*(%d+)%%%)")
-    h, s, l = tonumber(h), tonumber(s) / 100, tonumber(l) / 100
+    local h, s, l = str:match("hsl%(%s*(%d+)%s*,%s*(%d+)%%%s*,%s*(%d+)%%%s*%)")
+    h = tonumber(h) % 360
+    s = tonumber(s) / 100
+    l = tonumber(l) / 100
 
-    -- Convert HSL to RGB
-    local function hsl_to_rgba(h, s, l)
-      local c = (1 - math.abs(2 * l - 1)) * s
-      local x = c * (1 - math.abs((h / 60) % 2 - 1))
-      local m = l - c / 2
-      local r_, g_, b_ = (h < 60 and { c, x, 0 })
-        or (h < 120 and { x, c, 0 })
-        or (h < 180 and { 0, c, x })
-        or (h < 240 and { 0, x, c })
-        or (h < 300 and { x, 0, c })
-        or { c, 0, x }
+    local c = (1 - math.abs(2 * l - 1)) * s
+    local x = c * (1 - math.abs((h / 60) % 2 - 1))
+    local m = l - c / 2
 
-      return {
-        r = math.floor((r_ + m) * 255 + 0.5),
-        g = math.floor((g_ + m) * 255 + 0.5),
-        b = math.floor((b_ + m) * 255 + 0.5),
-        a = 1,
-      }
+    local r, g, b
+    if h < 60 then
+      r, g, b = c, x, 0
+    elseif h < 120 then
+      r, g, b = x, c, 0
+    elseif h < 180 then
+      r, g, b = 0, c, x
+    elseif h < 240 then
+      r, g, b = 0, x, c
+    elseif h < 300 then
+      r, g, b = x, 0, c
+    else
+      r, g, b = c, 0, x
     end
 
-    return hsl_to_rgba(h, s, l)
+    return {
+      r = math.floor((r + m) * 255 + 0.5),
+      g = math.floor((g + m) * 255 + 0.5),
+      b = math.floor((b + m) * 255 + 0.5),
+      a = 1,
+    }
   end,
+
   stringify = function(rgba)
     local r, g, b = rgba.r / 255, rgba.g / 255, rgba.b / 255
-    local max, min = math.max(r, g, b), math.min(r, g, b)
-    local h, s, l
-    l = (max + min) / 2
+    local max = math.max(r, g, b)
+    local min = math.min(r, g, b)
+    local delta = max - min
 
-    if max == min then
-      h, s = 0, 0
+    local h
+    if delta == 0 then
+      h = 0
+    elseif max == r then
+      h = 60 * (((g - b) / delta) % 6)
+    elseif max == g then
+      h = 60 * (((b - r) / delta) + 2)
     else
-      local d = max - min
-      s = l > 0.5 and d / (2 - max - min) or d / (max + min)
-
-      if max == r then
-        h = ((g - b) / d + (g < b and 6 or 0)) * 60
-      elseif max == g then
-        h = ((b - r) / d + 2) * 60
-      else
-        h = ((r - g) / d + 4) * 60
-      end
+      h = 60 * (((r - g) / delta) + 4)
     end
 
-    return string.format("hsl(%d, %d%%, %d%%)", h, s * 100, l * 100)
+    if h < 0 then
+      h = h + 360
+    end
+
+    local l = (max + min) / 2
+    local s = delta == 0 and 0 or delta / (1 - math.abs(2 * l - 1))
+
+    return string.format(
+      "hsl(%d, %d%%, %d%%)",
+      math.floor(h + 0.5),
+      math.floor(s * 100 + 0.5),
+      math.floor(l * 100 + 0.5)
+    )
   end,
 }
 

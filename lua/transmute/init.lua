@@ -92,6 +92,14 @@ M.show_options = function(opts)
           }
         end,
       }),
+      layout_strategy = "horizontal",
+      layout_config = {
+        horizontal = {
+          width = 0.5,
+          height = 0.7,
+          preview_width = 0.7,
+        },
+      },
       sorter = conf.generic_sorter(opts),
       previewer = previewers.new_buffer_previewer({
         define_preview = function(self, entry)
@@ -122,6 +130,8 @@ M.show_options = function(opts)
     })
     :find()
 end
+
+-- #131313
 
 M.setup = function() end
 
