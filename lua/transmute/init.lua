@@ -24,6 +24,16 @@ local function remove_duplicates(list)
   return result
 end
 
+local function replace_visual_selection(lines)
+  local start_pos = vim.fn.getpos("'<")
+  local end_pos = vim.fn.getpos("'>")
+
+  local start_line = start_pos[2] - 1
+  local end_line = end_pos[2]
+
+  vim.api.nvim_buf_set_lines(0, start_line, end_line, false, lines)
+end
+
 M.get_data_types = function(str)
   local types = {}
 
@@ -60,12 +70,49 @@ M.get_lines_data_types = function(lines)
   return remove_duplicates(types)
 end
 
-M.show_options = function(opts)
-  local input_lines = get_highlighted_lines()
-  opts = opts or {}
-  local conversions = {}
+M.getPicker = function(opts, conversions, preview, action)
+  return pickers.new(opts, {
+    prompt_title = "Available conversions",
+    finder = finders.new_table({
+      results = conversions,
+      entry_maker = function(entry)
+        return {
+          value = entry,
+          display = entry[1],
+          ordinal = entry[1],
+        }
+      end,
+    }),
+    layout_strategy = "horizontal",
+    layout_config = {
+      horizontal = {
+        width = 0.5,
+        height = 0.7,
+        preview_width = 0.7,
+      },
+    },
+    sorter = conf.generic_sorter(opts),
+    previewer = previewers.new_buffer_previewer({
+      define_preview = function(self, entry)
+        preview(self, entry)
+      end,
+    }),
+    attach_mappings = function(prompt_bufnr)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        action()
+      end)
+      return true
+    end,
+  })
+end
 
+M.transmute_from_to = function(opts)
+  local input_lines = get_highlighted_lines()
+  local conversions = {}
   local data_types = M.get_lines_data_types(input_lines)
+
+  opts = opts or {}
 
   if #data_types == 0 then
     print("no conversions available")
@@ -79,70 +126,80 @@ M.show_options = function(opts)
     end
   end
 
-  pickers
-    .new(opts, {
-      prompt_title = "Available conversions",
-      finder = finders.new_table({
-        results = conversions,
-        entry_maker = function(entry)
-          return {
-            value = entry,
-            display = entry[1],
-            ordinal = entry[1],
-          }
-        end,
-      }),
-      layout_strategy = "horizontal",
-      layout_config = {
-        horizontal = {
-          width = 0.5,
-          height = 0.7,
-          preview_width = 0.7,
-        },
-      },
-      sorter = conf.generic_sorter(opts),
-      previewer = previewers.new_buffer_previewer({
-        define_preview = function(self, entry)
-          local line_data = entry.value[2](input_lines)
-          local new_lines = line_data.new_lines
-          local highlight_data = line_data.highlight_data
-          local ns_id = vim.api.nvim_create_namespace("transmute_highlight")
-          local bufnr = self.state.bufnr
+  local preview = function(self, entry)
+    local line_data = entry.value[2](input_lines)
+    local new_lines = line_data.new_lines
+    local highlight_data = line_data.highlight_data
+    local ns_id = vim.api.nvim_create_namespace("transmute_highlight")
+    local bufnr = self.state.bufnr
 
-          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
 
-          for _, highlight in ipairs(highlight_data) do
-            local line = highlight.line - vim.fn.getpos("'<")[2] - 1
-            local col_start = highlight.col_start - 1
-            local col_end = highlight.col_end
-            -- print(col_start .. " " .. col_end)
+    for _, highlight in ipairs(highlight_data) do
+      local line = highlight.line - vim.fn.getpos("'<")[2] - 1
+      local col_start = highlight.col_start - 1
+      local col_end = highlight.col_end
 
-            vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Search", line, col_start, col_end)
-          end
-        end,
-      }),
-      attach_mappings = function(prompt_bufnr)
-        actions.select_default:replace(function()
-          actions.close(prompt_bufnr)
-          local selection = action_state.get_selected_entry()
-          local line_data = selection.value[2](input_lines)
-          local new_lines = line_data.new_lines
-          local start_pos = vim.fn.getpos("'<")
-          local end_pos = vim.fn.getpos("'>")
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Search", line, col_start, col_end)
+    end
+  end
 
-          local start_line = start_pos[2] - 1
-          local end_line = end_pos[2]
+  local action = function()
+    local selection = action_state.get_selected_entry()
+    local line_data = selection.value[2](input_lines)
 
-          vim.api.nvim_buf_set_lines(0, start_line, end_line, false, new_lines)
-        end)
-        return true
-      end,
-    })
-    :find()
+    replace_visual_selection(line_data.new_lines)
+  end
+
+  M.getPicker(opts, conversions, preview, action):find()
 end
 
--- #123412
--- hwb(0, 7%, 93%) sldfkjd #131313
+M.transmute_to = function(opts)
+  local input_lines = get_highlighted_lines()
+  local conversions = {}
+  local data_types = M.get_lines_data_types(input_lines)
+
+  opts = opts or {}
+
+  if #data_types == 0 then
+    print("no conversions available")
+    return
+  end
+
+  for _, start_data_type in ipairs(data_types) do
+    for end_data_type, converter in pairs(M.data_types[start_data_type].converters) do
+      local conversion = start_data_type .. " to " .. end_data_type
+      table.insert(conversions, { conversion, converter })
+    end
+  end
+
+  local preview = function(self, entry)
+    local line_data = entry.value[2](input_lines)
+    local new_lines = line_data.new_lines
+    local highlight_data = line_data.highlight_data
+    local ns_id = vim.api.nvim_create_namespace("transmute_highlight")
+    local bufnr = self.state.bufnr
+
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+
+    for _, highlight in ipairs(highlight_data) do
+      local line = highlight.line - vim.fn.getpos("'<")[2] - 1
+      local col_start = highlight.col_start - 1
+      local col_end = highlight.col_end
+
+      vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Search", line, col_start, col_end)
+    end
+  end
+
+  local action = function()
+    local selection = action_state.get_selected_entry()
+    local line_data = selection.value[2](input_lines)
+
+    replace_visual_selection(line_data.new_lines)
+  end
+
+  M.getPicker(opts, conversions, input_lines):find()
+end
 
 M.setup = function() end
 

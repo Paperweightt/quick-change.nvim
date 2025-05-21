@@ -268,6 +268,7 @@ for start_data_type, start_modules in pairs(M.data_type) do
               table.insert(new_lines, new_line)
               break
             end
+
             local start_string = string.sub(line, j, k)
             local adjusted_string = end_modules.stringify(start_modules.parse(start_string))
 
