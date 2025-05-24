@@ -1,12 +1,11 @@
-local M = {
-  data_type = {},
-}
-
 local registry = require("transmute.registry")
+local M = {}
 
-M.data_type["rgb"] = {
+M.formats = {}
+
+M.formats["rgb"] = {
   pattern = "rgb%(%d+,%s*%d+,%s*%d+%)",
-  parse = function(str)
+  standardize = function(str)
     local r, g, b = str:match("rgb%((%d+),%s*(%d+),%s*(%d+)%)")
 
     return {
@@ -24,9 +23,9 @@ M.data_type["rgb"] = {
   end,
 }
 
-M.data_type["rgba"] = {
+M.formats["rgba"] = {
   pattern = "rgba%(%d+,%s*%d+,%s*%d+,%s*[%.%d]+%)",
-  parse = function(str)
+  standardize = function(str)
     local r, g, b, a = str:match("rgba%((%d+),%s*(%d+),%s*(%d+),%s*([%d%.]+)%)")
 
     return {
@@ -45,10 +44,10 @@ M.data_type["rgba"] = {
   end,
 }
 
-M.data_type["hsl"] = {
+M.formats["hsl"] = {
   pattern = "hsl%(%s*%d+%s*,%s*%d+%%%s*,%s*%d+%%%s*%)",
 
-  parse = function(str)
+  standardize = function(str)
     local h, s, l = str:match("hsl%(%s*(%d+)%s*,%s*(%d+)%%%s*,%s*(%d+)%%%s*%)")
     h = tonumber(h) % 360
     s = tonumber(s) / 100
@@ -114,23 +113,23 @@ M.data_type["hsl"] = {
   end,
 }
 
-M.data_type["hsla"] = vim.tbl_deep_extend("force", vim.deepcopy(M.data_type["hsl"]), {
+M.formats["hsla"] = vim.tbl_deep_extend("force", vim.deepcopy(M.formats["hsl"]), {
   pattern = "hsla%(%d+,%s*%d+%%,%s*%d+%%,%s*[%d%.]+%)",
-  parse = function(str)
+  standardize = function(str)
     local h, s, l, a = str:match("hsla%((%d+),%s*(%d+)%%,%s*(%d+)%%,%s*([%d%.]+)%)")
-    local rgba = M.data_type["hsl"].parse(string.format("hsl(%d, %d%%, %d%%)", h, s, l))
+    local rgba = M.formats["hsl"].standardize(string.format("hsl(%d, %d%%, %d%%)", h, s, l))
     rgba.a = tonumber(a)
     return rgba
   end,
   stringify = function(rgba)
-    local hsl = M.data_type["hsl"].stringify(rgba)
+    local hsl = M.formats["hsl"].stringify(rgba)
     return hsl:gsub("^hsl", "hsla"):gsub("%)$", string.format(", %.2f)", rgba.a))
   end,
 })
 
-M.data_type["hex"] = {
+M.formats["hex"] = {
   pattern = "#%x%x%x%x%x%x",
-  parse = function(str)
+  standardize = function(str)
     local r, g, b = str:match("#(%x%x)(%x%x)(%x%x)")
     return {
       r = tonumber(r, 16),
@@ -144,9 +143,9 @@ M.data_type["hex"] = {
   end,
 }
 
-M.data_type["hexa"] = {
+M.formats["hexa"] = {
   pattern = "#%x%x%x%x%x%x%x%x",
-  parse = function(str)
+  standardize = function(str)
     local r, g, b, a = str:match("#(%x%x)(%x%x)(%x%x)(%x%x)")
     return {
       r = tonumber(r, 16),
@@ -161,9 +160,9 @@ M.data_type["hexa"] = {
   end,
 }
 
-M.data_type["hwb"] = {
+M.formats["hwb"] = {
   pattern = "hwb%(%d+,%s*%d+%%,%s*%d+%%%)",
-  parse = function(str)
+  standardize = function(str)
     local h, w, b = str:match("hwb%((%d+),%s*(%d+)%%,%s*(%d+)%%%)")
     h = tonumber(h)
     w = tonumber(w) / 100
@@ -237,8 +236,94 @@ M.data_type["hwb"] = {
   end,
 }
 
-for start_data_type, start_modules in pairs(M.data_type) do
-  registry.data_types[start_data_type] = {
+local function find_first_format(text, formats, start)
+  local earliest = nil
+
+  for _, format in ipairs(formats) do
+    local s, e = string.find(text, format.pattern, start)
+    if s and (not earliest or s < earliest.start) then
+      earliest = {
+        format = format,
+        match = string.sub(text, s, e),
+        start = s,
+        stop = e,
+      }
+    end
+  end
+
+  return earliest
+end
+--#ffffff
+local function convert_line(start_format, end_format, line, start_col, end_col)
+  local formats = {}
+  local highlights = {}
+  local new_line = ""
+  local i = 0
+
+  if start_format == "any" then
+    for _, format in pairs(M.formats) do
+      table.insert(formats, format)
+    end
+  else
+    formats = { M.formats[start_format] }
+  end
+
+  while true do
+    local earliest_table = find_first_format(line, formats, i + 1)
+
+    if earliest_table == nil then
+      new_line = new_line .. string.sub(line, i + 1, string.len(line))
+      return { highlights = highlights, line = new_line }
+    end
+
+    local j = earliest_table.start
+    local k = earliest_table.stop
+    start_format = earliest_table.format
+
+    local start_string = string.sub(line, j, k)
+    local adjusted_string = M.formats[end_format].stringify(start_format.standardize(start_string))
+
+    -- add in non adjusted word
+    new_line = new_line .. string.sub(line, i, j - 1)
+
+    -- add highlight
+    table.insert(highlights, {
+      col_start = string.len(new_line) + 1,
+      col_end = string.len(new_line) + string.len(adjusted_string),
+    })
+    -- add in adjusted word
+    new_line = new_line .. adjusted_string
+
+    i = k
+  end
+end
+
+local function convert_lines(start_format, end_format, lines, start_col, end_col)
+  local new_lines = {}
+  local highlights = {}
+
+  for line_number, line in ipairs(lines) do
+    local convert_data = convert_line(start_format, end_format, line, start_col, end_col)
+    table.insert(new_lines, convert_data.line)
+
+    for _, highlight in ipairs(convert_data.highlights) do
+      highlight.line = line_number
+      table.insert(highlights, highlight)
+    end
+  end
+
+  return {
+    lines = new_lines,
+    highlights = highlights,
+  }
+end
+
+registry.types["color"] = {
+  convert_lines = convert_lines,
+}
+
+for start_format, start_modules in pairs(M.formats) do
+  registry.formats[start_format] = {
     find = function(str)
       local match = str:match(start_modules.pattern)
       if match then
@@ -246,52 +331,8 @@ for start_data_type, start_modules in pairs(M.data_type) do
       end
       return false
     end,
-    converters = {},
+    type = "color",
   }
-
-  for end_data_type, end_modules in pairs(M.data_type) do
-    if start_data_type ~= end_data_type then
-      registry.data_types[start_data_type].converters[end_data_type] = function(lines)
-        local new_lines = {}
-        local highlight_data = {}
-
-        for line_number, line in ipairs(lines) do
-          local new_line = ""
-          local i = 0
-
-          while true do
-            local j, k = string.find(line, start_modules.pattern, i + 1) -- find 'next' newline
-
-            -- test for both to make warnings go away
-            if j == nil or k == nil then
-              new_line = new_line .. string.sub(line, i + 1, string.len(line))
-              table.insert(new_lines, new_line)
-              break
-            end
-
-            local start_string = string.sub(line, j, k)
-            local adjusted_string = end_modules.stringify(start_modules.parse(start_string))
-
-            -- add in non adjusted word
-            new_line = new_line .. string.sub(line, i, j - 1)
-
-            -- add highlight
-            table.insert(highlight_data, {
-              line = line_number,
-              col_start = string.len(new_line) + 1,
-              col_end = string.len(new_line) + string.len(adjusted_string),
-            })
-            -- add in adjusted word
-            new_line = new_line .. adjusted_string
-
-            i = k
-          end
-        end
-
-        return { new_lines = new_lines, highlight_data = highlight_data }
-      end
-    end
-  end
 end
 
 return M

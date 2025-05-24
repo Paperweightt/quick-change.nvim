@@ -1,5 +1,6 @@
 local M = {
-  data_types = {},
+  formats = {},
+  types = {},
 }
 
 return M
