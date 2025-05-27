@@ -253,7 +253,7 @@ local function find_first_format(text, formats, start)
 
   return earliest
 end
---#ffffff
+
 local function convert_line(start_format, end_format, line, start_col, end_col)
   local formats = {}
   local highlights = {}

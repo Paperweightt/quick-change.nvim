@@ -1,4 +1,6 @@
-local M = {}
+require("transmute.converters.colors")
+
+local registry = require("transmute.registry")
 local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
 local actions = require("telescope.actions")
@@ -6,9 +8,7 @@ local action_state = require("telescope.actions.state")
 local previewers = require("telescope.previewers")
 local conf = require("telescope.config").values
 
-require("transmute.converters.colors")
-
-local registry = require("transmute.registry")
+local M = {}
 
 local function remove_duplicates(list)
   local seen = {}
@@ -140,10 +140,12 @@ M.transmute_from_to = function(opts)
   local results = {}
   local data_formats = M.get_lines_data_formats(input_lines)
 
-  opts = opts or {}
+  opts = opts or conf.options.picker
 
   if #data_formats == 0 then
-    print("no conversions available")
+    if conf.options.notify then
+      vim.notify("No transmutations available", vim.log.levels.ERROR)
+    end
     return
   end
 
@@ -189,16 +191,15 @@ M.transmute_to = function(opts)
   local input_lines = get_highlighted_lines()
   local results = {}
   local data_types = M.get_lines_data_types(input_lines)
-  local format_types = M.get_lines_data_formats(input_lines)
 
-  opts = opts or {}
+  opts = opts or conf.options.picker
 
   if #data_types == 0 then
-    print("no conversions available")
+    if conf.options.notify then
+      vim.notify("No transmutations available", vim.log.levels.ERROR)
+    end
     return
   end
-
-  vim.print(data_types)
 
   for _, data_type in ipairs(data_types) do
     for format_type, modules in pairs(registry.formats) do
