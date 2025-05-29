@@ -230,7 +230,7 @@ M.transmute_to = function(opts)
 
   local action = function()
     local selection = action_state.get_selected_entry()
-    local line_data = selection.value[2](input_lines)
+    local line_data = selection.value[2]
 
     replace_visual_selection(line_data.new_lines)
   end
