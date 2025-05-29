@@ -20,9 +20,12 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim)
     "nvim-telescope/telescope.nvim",
   },
   config = function()
-    vim.keymap.set('v', '<leader>t', function()
-      require('transmute').show_options()
-    end, { desc = '[T]ransmute highlighted text' })
+    local transmute = require("transmute")
+
+    transmute.setup()
+
+    vim.keymap.set('v', '<leader>tf', transmute.transmute_from_to, { desc = '[T]ransmute [F]rom to' })
+    vim.keymap.set('v', '<leader>tt', transmute.transmute_to, { desc = '[T]ransmute [T]o' })
   end,
 }
 ```

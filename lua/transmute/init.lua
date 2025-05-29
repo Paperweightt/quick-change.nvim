@@ -8,7 +8,11 @@ local action_state = require("telescope.actions.state")
 local previewers = require("telescope.previewers")
 local conf = require("telescope.config").values
 
+local config = require("transmute.config").options
+
 local M = {}
+
+M.setup = require("transmute.config").setup
 
 local function remove_duplicates(list)
   local seen = {}
@@ -140,10 +144,10 @@ M.transmute_from_to = function(opts)
   local results = {}
   local data_formats = M.get_lines_data_formats(input_lines)
 
-  opts = opts or conf.options.picker
+  opts = opts or config.picker
 
   if #data_formats == 0 then
-    if conf.options.notify then
+    if config.notify then
       vim.notify("No transmutations available", vim.log.levels.ERROR)
     end
     return
@@ -179,7 +183,7 @@ M.transmute_from_to = function(opts)
 
   local action = function()
     local selection = action_state.get_selected_entry()
-    local convert_data = selection.value[2].lines
+    local convert_data = selection.value[2]
 
     replace_visual_selection(convert_data.lines)
   end
@@ -192,10 +196,10 @@ M.transmute_to = function(opts)
   local results = {}
   local data_types = M.get_lines_data_types(input_lines)
 
-  opts = opts or conf.options.picker
+  opts = opts or config.picker
 
   if #data_types == 0 then
-    if conf.options.notify then
+    if config.notify then
       vim.notify("No transmutations available", vim.log.levels.ERROR)
     end
     return
@@ -213,13 +217,13 @@ M.transmute_to = function(opts)
   end
 
   local preview = function(self, entry)
-    local line_data = entry.value[2]
+    local convert_data = entry.value[2]
     local ns_id = vim.api.nvim_create_namespace("transmute_highlight")
     local bufnr = self.state.bufnr
 
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, line_data.lines)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, convert_data.lines)
 
-    for _, highlight in ipairs(line_data.highlights) do
+    for _, highlight in ipairs(convert_data.highlights) do
       local line = highlight.line - vim.fn.getpos("'<")[2] - 1
       local col_start = highlight.col_start - 1
       local col_end = highlight.col_end
@@ -232,12 +236,10 @@ M.transmute_to = function(opts)
     local selection = action_state.get_selected_entry()
     local line_data = selection.value[2]
 
-    replace_visual_selection(line_data.new_lines)
+    replace_visual_selection(line_data.lines)
   end
 
   M.getPicker(opts, results, preview, action):find()
 end
-
-M.setup = function() end
 
 return M
